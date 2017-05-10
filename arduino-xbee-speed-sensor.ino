@@ -1,4 +1,4 @@
-#include <Printers.h>
+//#include <Printers.h>
 #include <XBee.h>
 
 XBee xbee = XBee();
@@ -6,7 +6,9 @@ XBeeResponse response = XBeeResponse();
 
 ZBRxResponse rx = ZBRxResponse();
 
-int packetCount = 0;
+unsigned long time = 0;
+unsigned long lastTime = 0;
+unsigned long packetCount = 0;
 
 void setup() {
   // initialize Serial Monitor
@@ -16,12 +18,15 @@ void setup() {
   // hook Xbee to UART serial port
   xbee.setSerial(Serial1);
 
-  delay(500);
+  //delay(500);
   // print message to Serial Monitor that program has started
-  Serial.println("Initialized.");
+  //Serial.println("Initialized.");
 }
 
 void loop() {
+  // count loops
+  time = millis();
+  
   // setup .isAvailable() to work
   xbee.readPacket();
 
@@ -29,10 +34,15 @@ void loop() {
     packetCount++;
     xbee.getResponse(response);
  
-    Serial.println();
-    Serial.print("Packet #");
-    Serial.println(packetCount, DEC);
-/*
+    Serial.print("P#");
+    Serial.print(packetCount, DEC);
+    Serial.print(" T=");
+    Serial.print(time, DEC);
+    Serial.print("ms dT=");
+    Serial.print(time-lastTime, DEC);
+    Serial.println("ms");
+    lastTime = time;
+
     if (response.getApiId() == ZB_RX_RESPONSE) {
       response.getZBRxResponse(rx);
       Serial.print("Frame Type is 0x");
@@ -44,17 +54,17 @@ void loop() {
         else
           Serial.write(rx.getData()[i]);
       }
+      Serial.print(" Checksum is ");
+      Serial.print(rx.getChecksum(), HEX);
       Serial.println();
     }
   }
   else if (xbee.getResponse().isError()) {
+    xbee.getResponse(response);
     Serial.print("*** Error code:");
-    Serial.println(xbee.getResponse().getErrorCode(), DEC);
+    Serial.println(response.getErrorCode(), DEC);
   }
   else {
     //else case
-    delay(1000);
-    Serial.println("Waiting for frame.");
-    */
   }
 }
