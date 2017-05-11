@@ -61,8 +61,8 @@ void loop() {
   time = millis();
 
   // read sensor period
-  sensorPeriod = pulseIn(sensorPin, LOW, 100000000) * 2;  // in microseconds
-  //sensorPeriod = sensorPeriod + pulseIn(sensorPin, HIGH);
+  sensorPeriod = pulseIn(sensorPin, LOW) * 2;  // in microseconds
+  //sensorPeriod = pulseIn(sensorPin, HIGH);
   
   //get speeds in 0.1km/h
   // NSX speed sesnor pulses 4 times per rev
