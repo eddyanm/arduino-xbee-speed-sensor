@@ -1,38 +1,36 @@
-//#include <Printers.h>
 #include <XBee.h>
+#include <FreqMeasure.h>
 
 // create XBee object and payload
 XBee xbee = XBee();
 
 // reduced Motec Data Set 3/CRC32 format
 // 3 header, 1 data length, 30 channels, 4 CRC32 bytes
-const unsigned int payloadLen = 4 + 60 + 4;
+const unsigned int payloadLen = 4 + 60 + 4; // 68
 uint8_t payload[payloadLen]; 
 
-// RX object
-XBeeResponse response = XBeeResponse();
-ZBRxResponse rx = ZBRxResponse();
-
-// address for receiving XBee and TX object
-XBeeAddress64 addr64 = XBeeAddress64(0x0013a200, 0x403217f3);
+// Coordinator address for receiving XBee and TX object
+XBeeAddress64 addr64 = XBeeAddress64(0x0, 0x0);
 ZBTxRequest tx = ZBTxRequest(addr64, payload, payloadLen);
-ZBTxStatusResponse txStatus = ZBTxStatusResponse();
+//ZBTxStatusResponse txStatus = ZBTxStatusResponse();
 
 unsigned long time = 0;
-unsigned long lastTime = 0;
+unsigned long lastTxTime = 0;
+unsigned long lastSampleTime = 0;
 unsigned txPeriod = 100;  // delay between TX in ms
-unsigned long packetCount = 0;
+unsigned samplePeriod = 2000;  // max delay between input samples in ms
+//unsigned long packetCount = 0;
 
 // speed sesnor pin
-int sensorPin = 7;
+int sensorPin = 4;
 
 // speed sensor values
-unsigned long sensorPeriod = 0; // in microseconds
-unsigned long sensorCoeff = 265439627; // specific to NSX speed sensor
+float sensorFreq = 0;
+float sensorCoeff = 2.65439627; // specific to NSX speed sensor
 
-// init vehicle speeds in 0.1km/h from speed sensor
-uint16_t groundSpeed = 0;
-uint16_t driveSpeed = 0;
+// init vehicle speeds variables for Tx
+uint16_t groundSpeed = 0;  // in 0.1km/h
+uint16_t driveSpeed = 0;  // in 0.1km/h
 
 void setup() {
   // initialize Serial Monitor
@@ -54,16 +52,23 @@ void setup() {
   }
   // init input pin for speed sensor
   pinMode(sensorPin, INPUT_PULLUP);
+  // setup frequency measurement
+  FreqMeasure.begin();  // uses pin 7-ICP1
 }
 
 void loop() {
-  // sample loop time
+  // loop time
   time = millis();
 
-  // read sensor period
-  sensorPeriod = pulseIn(sensorPin, LOW) * 2;  // in microseconds
-  //sensorPeriod = pulseIn(sensorPin, HIGH);
-  
+  // read sensor frequency
+  if (FreqMeasure.available()) {
+    sensorFreq = FreqMeasure.countToFrequency(FreqMeasure.read());
+    lastSampleTime = time;
+  } else {
+    if (time-lastSampleTime >= samplePeriod)
+      sensorFreq = 0;
+  }
+
   //get speeds in 0.1km/h
   // NSX speed sesnor pulses 4 times per rev
   // diff gear to speed sensor gear ratio is 29:23
@@ -71,20 +76,19 @@ void loop() {
   // 1.900052km/hr=1000*4*29/23 pulses/3600s
   // 1000*4*29*1000/23 pulses/3600s/period(ms) -> km/hr
   // coeff = 526*4*(29/23)/3600/10
-  //sensorPeriod = 200000000;
-  groundSpeed = sensorPeriod == 0 ? 0 : sensorCoeff / sensorPeriod;
+  groundSpeed = sensorCoeff * sensorFreq * 10;
   driveSpeed = groundSpeed;
   
   // send data if time to send
-  if (time-lastTime >= txPeriod) {
+  if (time-lastTxTime >= txPeriod) {
     // print debug info
     Serial.print("t=");
     Serial.print(time, DEC);
-    Serial.print("ms T=");
-    Serial.print(sensorPeriod, DEC);
-    Serial.print("us v=");
-    Serial.print(groundSpeed, DEC);
-    Serial.println("*0.1km/h");
+    Serial.print("ms f=");
+    Serial.print(sensorFreq);
+    Serial.print("Hz v=");
+    Serial.print(sensorCoeff * sensorFreq);
+    Serial.println("km/h");
     // load drive speed
     payload[61] = driveSpeed >> 8 & 0xff;
     payload[60] = driveSpeed & 0xff;
@@ -94,51 +98,6 @@ void loop() {
     // send packet
     xbee.send(tx);
     // reset timer
-    lastTime=time;
+    lastTxTime = time;
   }
-  /*
-  // count loops
-  time = millis();
-  
-  // setup .isAvailable() to work
-  xbee.readPacket();
-
-  if (xbee.getResponse().isAvailable()) {
-    packetCount++;
-    xbee.getResponse(response);
- 
-    Serial.print("P#");
-    Serial.print(packetCount, DEC);
-    Serial.print(" T=");
-    Serial.print(time, DEC);
-    Serial.print("ms dT=");
-    Serial.print(time-lastTime, DEC);
-    Serial.println("ms");
-    lastTime = time;
-
-    if (response.getApiId() == ZB_RX_RESPONSE) {
-      response.getZBRxResponse(rx);
-      Serial.print("Frame Type is 0x");
-      Serial.println(response.getApiId(), HEX);
-      Serial.print("Frame is ");
-      for (int i=0; i < rx.getDataLength(); i++) {
-        if (iscntrl(rx.getData()[i]))
-          Serial.write(' ');
-        else
-          Serial.write(rx.getData()[i]);
-      }
-      Serial.print(" Checksum is ");
-      Serial.print(rx.getChecksum(), HEX);
-      Serial.println();
-    }
-  }
-  else if (xbee.getResponse().isError()) {
-    xbee.getResponse(response);
-    Serial.print("*** Error code:");
-    Serial.println(response.getErrorCode(), DEC);
-  }
-  else {
-    //else case
-  }
-  */
 }
